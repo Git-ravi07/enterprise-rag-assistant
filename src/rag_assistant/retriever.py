@@ -42,7 +42,13 @@ class SemanticRetriever:
             device="cpu",
         )
 
-    def search(self, question: str, top_k: int = 3) -> list[dict]:
+    
+    def search(
+        self,
+        question: str,
+        top_k: int = 3,
+        min_score: float | None = None,
+    ) -> list[dict]:
         question = question.strip()
 
         if not question:
@@ -50,6 +56,9 @@ class SemanticRetriever:
 
         if top_k <= 0:
             raise ValueError("top_k must be greater than zero.")
+
+        if min_score is not None and not -1.0 <= min_score <= 1.0:
+            raise ValueError("min_score must be between -1 and 1.")
 
         tokens = self.model.tokenizer(
             question,
@@ -67,7 +76,18 @@ class SemanticRetriever:
         )
 
         scores = self.embeddings @ query_embedding
-        best_indices = np.argsort(-scores)[:top_k]
+
+        # Keep only chunks that meet the optional threshold.
+        eligible_indices = np.arange(len(scores))
+
+        if min_score is not None:
+            eligible_indices = eligible_indices[scores >= min_score]
+
+        # Sort eligible chunks by descending similarity.
+        ranked_indices = eligible_indices[
+            np.argsort(-scores[eligible_indices])
+        ]
+        best_indices = ranked_indices[:top_k]
 
         results = []
 
